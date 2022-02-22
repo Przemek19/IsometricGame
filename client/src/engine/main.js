@@ -6,26 +6,33 @@ class IsometricGame {
     options.height = !!options.height ? options.height : 600;
     options.element = !!options.element ? options.element : 'body';
     options.background = !!options.background ? options.background : '#222';
+    this.fpsMax = !!options.fpsMax ? options.fpsMax : 60;
 
     this.canvas = document.createElement('canvas');
     this.canvas.width = options.width;
     this.canvas.height = options.height;
     this.canvas.style.background = options.background;
-    this.camera = { x: 0, y: 0, size: 1 };
+    this.camera = {
+      x: 0,
+      y: 0,
+      sx: 0,
+      sy: 0,
+      size: 1,
+    };
     document.querySelector(options.element).appendChild(this.canvas);
   }
 
   getScreenPositionFromTile(x, y, z = 0, size) {
     return {
-      x: this.canvas.width / 2 - size / 2 + size * x / 2 - size / 2 * y + this.camera.x,
-      y:  this.canvas.height / 2 - size / 2 + size * y / 4 + size / 4 * x - size / 4 * z + this.camera.y,
+      x: this.canvas.width / 2 - size / 2 + size * x / 2 - size / 2 * y - size * this.camera.x / 2 + size * this.camera.y / 2,
+      y: this.canvas.height / 2 - size / 2 + size * y / 4 + size / 4 * x - size / 4 * z - size * this.camera.x / 4 - this.camera.y / 4 * size,
     };
   }
 
   getScreenPositionFromObject(x, y, z = 0, size) {
     return {
-      x: this.canvas.width / 2 - size / 2 + size * x / 2 - size / 2 * y + this.camera.x,
-      y:  this.canvas.height / 2 - size / 2 + size * y / 4 + size / 4 * x - size / 4 * z + this.camera.y - size / 1.5,
+      x: this.canvas.width / 2 - size / 2 + size * x / 2 - size / 2 * y + this.camera.x - this.camera.y,
+      y:  this.canvas.height / 2 - size / 2 + size * y / 4 + size / 4 * x - size / 4 * z - size / 1.5 + this.camera.y / 2 +  this.camera.x,
     };
   }
   
@@ -37,7 +44,8 @@ class IsometricGame {
       if (this.preRender) this.preRender();
       this.canvas.getContext('2d').clearRect(0, 0, this.canvas.width, this.canvas.height);
       if (this.render) this.render();
-      requestAnimationFrame(xxx);
+      //requestAnimationFrame(xxx);
+      setTimeout(xxx, 1000 / this.fpsMax);
     };
     xxx();
   }

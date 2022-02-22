@@ -8,6 +8,8 @@ IsometricGame.Map = class {
     this.size = size;
     this.extraTiles = [];
     this.GameObject = GameObject;
+    this.lowestPoint = undefined;
+    this.highestPoint = undefined;
   }
   async load(file) {
     const texturesToLoad = [];
@@ -39,6 +41,20 @@ IsometricGame.Map = class {
   }
   createTile(tid, x, y, z) {
     this.lastTileID += 1;
+    if (!this.lowestPoint) {
+      this.lowestPoint = { x, y, z };
+    } else {
+      if (x < this.lowestPoint.x) this.lowestPoint.x = x;
+      if (y < this.lowestPoint.y) this.lowestPoint.x = y;
+      if (z < this.lowestPoint.z) this.lowestPoint.x = z;
+    }
+    if (!this.highestPoint) {
+      this.highestPoint = { x, y, z };
+    } else {
+      if (x > this.highestPoint.x) { this.highestPoint.x = x; }
+      if (y > this.highestPoint.y) { this.highestPoint.y = y; }
+      if (z > this.highestPoint.z) { this.highestPoint.z = z; }
+    }
     return this.tiles[this.tiles.push({ id: this.lastTileID, tid, x, y, z }) - 1];
   }
   createObject(oid, x, y, z) {
@@ -63,7 +79,179 @@ IsometricGame.Map = class {
     downloadAnchorNode.click();
     downloadAnchorNode.remove();
   }
+
+  drawTile(tile, cameraSize) {
+    let tileData;
+    if (IsometricGame.Map.defaultTiles[tile.tid]) { // TODO: Dodać własne elementy od twórcy mapy
+      tileData = IsometricGame.Map.defaultTiles[tile.tid];
+    }
+
+    const screenPosition = this.GameObject.getScreenPositionFromTile(tile.x, tile.y, tile.z, cameraSize);
+
+    let src = tileData.src;
+    if (tileData.animation) {
+      const t = Date.now() % tileData.animation.duration * tileData.animation.textures.length;
+      for (let ii in tileData.animation.textures) {
+        ii = Number(ii);
+        const interval = (ii + 1) * tileData.animation.duration;
+        if (t <= interval && t > interval - tileData.animation.duration) {
+          src = tileData.animation.textures[ii];
+          break;
+        }
+      }
+    }
+
+    this.GameObject.drawImage(src, screenPosition.x, screenPosition.y, this.size * this.GameObject.camera.size, this.size * this.GameObject.camera.size);
+  }
+
+  drawObject() {
+    
+  }
+
   draw() {
+    const realRenderDistance = this.GameObject.renderDistance * 2 + 1;
+    const cameraX = Math.floor(this.GameObject.camera.x);
+    const cameraY = Math.floor(this.GameObject.camera.y);
+
+    const tileElements = [];
+    for (let tileIndex in this.tiles) {
+      const tile = this.tiles[tileIndex];
+      if (!tileElements[tile.x]) tileElements[tile.x] = [];
+      if (!tileElements[tile.x][tile.y]) tileElements[tile.x][tile.y] = [];
+      tileElements[tile.x][tile.y][tile.z] = tile;
+    }
+    const objectElements = [];
+    for (let objectIndex in this.objects) {
+      const object = this.objects[objectIndex];
+      if (!objectElements[object.x]) objectElements[object.x] = [];
+      if (!objectElements[object.x][object.y]) objectElements[object.x][object.y] = [];
+      if (!objectElements[object.x][object.y][object.z]) objectElements[object.x][object.y][object.z] = [];
+      objectElements[object.x][object.y][object.z].push(object);
+    }
+
+    for (let layer = 0; layer < realRenderDistance * 2 - 1; layer += 1) {
+      const halfLayer = layer / 2;
+      const halfLayerPlusCameraXMinusRenderDistance = halfLayer + cameraX - realRenderDistance;
+      const halfLayerPlusCameraY = halfLayer + cameraY;
+      const cameraSize = this.size * this.GameObject.camera.size;
+      if (layer % 2 == 0) { // Dłuższy
+        //console.log('D');
+        for (let i = 0; i < realRenderDistance; i += 1) {
+          const x = halfLayerPlusCameraXMinusRenderDistance + 1 + i;
+          const y = halfLayerPlusCameraY - i;
+          //console.log(`${x};${y}`);
+          if (tileElements[x] && tileElements[x][y]) {
+            for (let z = this.lowestPoint.z; z <= this.highestPoint.z; z += 1) {
+              if (tileElements[x][y][z]) this.drawTile(tileElements[x][y][z], cameraSize);
+            }
+          }
+        }
+      } else { // Krótszy
+        //console.log('K');
+        for (let i = 0; i < realRenderDistance - 1; i += 1) {
+          const x = halfLayerPlusCameraXMinusRenderDistance + 1.5 + i;
+          const y = halfLayerPlusCameraY - .5 - i;
+          //console.log(`${x};${y}`);
+          if (tileElements[x] && tileElements[x][y]) {
+            for (let z = this.lowestPoint.z; z <= this.highestPoint.z; z += 1) {
+              if (tileElements[x][y][z]) this.drawTile(tileElements[x][y][z], cameraSize);
+            }
+          }
+        }  
+      }
+    }
+  }
+
+  draw2() {
+    const elements = [ ...this.tiles, ...this.objects ];
+    const cameraRealY = -this.GameObject.camera.y * 4;
+    const cameraRealX = -this.GameObject.camera.x * 2;
+    //console.log(cameraRealY)
+    let fromY = Math.round(cameraRealY / (this.size * this.GameObject.camera.size)) - this.GameObject.renderDistance;
+    let offsetY = 0;
+    if (fromY < 0) {
+      offsetY = -fromY;
+      fromY = 0;
+    }
+    let toY = Math.round(cameraRealY / (this.size * this.GameObject.camera.size)) + this.GameObject.renderDistance + offsetY;
+
+    let fromX = Math.round(cameraRealX / (this.size * this.GameObject.camera.size)) - this.GameObject.renderDistance;
+    let offsetX = 0;
+    if (fromX < 0) {
+      offsetX = -fromX;
+      fromX = 0;
+    }
+
+    let toX = Math.round(cameraRealX / (this.size * this.GameObject.camera.size)) + this.GameObject.renderDistance + offsetX;
+    console.log(`${fromX}:${fromY} - ${toX}:${toY}`);
+
+    for (let y = fromY; y <= toY ; y += 1) {
+      for (let x = fromX; x <= y ; x += 1) {
+        //console.log(`${- x};${x}`);
+        for (let rZ = this.lowestPoint.z; rZ <= this.highestPoint.z; rZ += 1) {
+          const rX = y - x - offsetX;
+          const rY = x - offsetY;
+          for (let eID in this.tiles) {
+            const tile = this.tiles[eID];
+            if (Math.round(tile.x) == rX && Math.round(tile.y) == rY && Math.round(tile.z) == rZ) {
+              // TILE
+
+              let tileData;
+              if (IsometricGame.Map.defaultTiles[tile.tid]) { // TODO: Dodać własne elementy od twórcy mapy
+                tileData = IsometricGame.Map.defaultTiles[tile.tid];
+              }
+
+              const screenPosition = this.GameObject.getScreenPositionFromTile(tile.x, tile.y, tile.z, this.size * this.GameObject.camera.size);
+    
+              let src = tileData.src;
+              if (tileData.animation) {
+                const t = Date.now() % tileData.animation.duration * tileData.animation.textures.length;
+                for (let ii in tileData.animation.textures) {
+                  ii = Number(ii);
+                  const interval = (ii + 1) * tileData.animation.duration;
+                  if (t <= interval && t > interval - tileData.animation.duration) {
+                    src = tileData.animation.textures[ii];
+                    break;
+                  }
+                }
+              }
+        
+              this.GameObject.drawImage(src, screenPosition.x, screenPosition.y, this.size * this.GameObject.camera.size, this.size * this.GameObject.camera.size);
+            }
+          }
+
+          for (let eID in this.objects) {
+            const object = this.objects[eID];
+            if (Math.round(object.x) == rX && Math.round(object.y) == rY && Math.round(object.z) == rZ) {
+              // OBJ
+              let objectData;
+              if (IsometricGame.Map.defaultObjects[object.oid]) { // TODO: Dodać własne elementy od twórcy mapy
+                objectData = IsometricGame.Map.defaultObjects[object.oid];
+              }
+              const screenPosition = this.GameObject.getScreenPositionFromObject(object.x, object.y, object.z, this.size * this.GameObject.camera.size);
+        
+              let src = objectData.src;
+              if (objectData.animation) {
+                const t = Date.now() % objectData.animation.duration * objectData.animation.textures.length;
+                for (let ii in objectData.animation.textures) {
+                  ii = Number(ii);
+                  const interval = (ii + 1) * objectData.animation.duration;
+                  if (t <= interval && t > interval - objectData.animation.duration) {
+                    src = objectData.animation.textures[ii];
+                    break;
+                  }
+                }
+              }
+        
+              this.GameObject.drawImage(src, screenPosition.x, screenPosition.y, this.size * this.GameObject.camera.size, this.size * this.GameObject.camera.size);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  draw_old() {
     const elements = [ ...this.tiles, ...this.objects ];
     const layers = [];
     for (let i in elements) {
