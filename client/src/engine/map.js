@@ -59,6 +59,20 @@ IsometricGame.Map = class {
   }
   createObject(oid, x, y, z) {
     this.lastObjectID += 1;
+    if (!this.lowestPoint) {
+      this.lowestPoint = { x, y, z };
+    } else {
+      if (x < this.lowestPoint.x) this.lowestPoint.x = x;
+      if (y < this.lowestPoint.y) this.lowestPoint.x = y;
+      if (z < this.lowestPoint.z) this.lowestPoint.x = z;
+    }
+    if (!this.highestPoint) {
+      this.highestPoint = { x, y, z };
+    } else {
+      if (x > this.highestPoint.x) { this.highestPoint.x = x; }
+      if (y > this.highestPoint.y) { this.highestPoint.y = y; }
+      if (z > this.highestPoint.z) { this.highestPoint.z = z; }
+    }
     return this.objects[this.objects.push({ id: this.lastObjectID, oid, x, y, z }) - 1]; 
   }
   download() {
@@ -102,13 +116,96 @@ IsometricGame.Map = class {
     }
 
     this.GameObject.drawImage(src, screenPosition.x, screenPosition.y, this.size * this.GameObject.camera.size, this.size * this.GameObject.camera.size);
+    if (this.GameObject.devmode) {
+      this.GameObject.drawText(`(${tile.x}x;${tile.y}y;${tile.z}z)`, screenPosition.x + this.size * 0.25 * this.GameObject.camera.size, screenPosition.y + this.size * 0.25 * this.GameObject.camera.size, `${this.size * this.GameObject.camera.size / 12}px Arial`, '#fffa');
+    }
   }
 
-  drawObject() {
+  drawObject(object, cameraSize) {
+    let objectData;
+    if (IsometricGame.Map.defaultObjects[object.oid]) { // TODO: Dodać własne elementy od twórcy mapy
+      objectData = IsometricGame.Map.defaultObjects[object.oid];
+    }
+    //const screenPosition = this.GameObject.getScreenPositionFromTile(object.x - objectData.xSize - (objectData.xSize > 1 ? 1 : 0), object.y - objectData.ySize, object.z + objectData.zSize - 1, cameraSize);
+    cameraSize /= 2;
+    const width = 2 * cameraSize + (cameraSize * (objectData.xSize - 1)) + cameraSize * (objectData.ySize - 1);
+    const height = (Math.max(objectData.xSize, objectData.ySize) - 1) * cameraSize + cameraSize + objectData.zSize * cameraSize;
+
+    const screenPosition = this.GameObject.getScreenPositionFromTile(
+      object.x,
+      object.y,
+      object.z,
+      cameraSize * 2
+    );
+
+    const maxSize = Math.max(objectData.xSize, objectData.ySize);
+
+    screenPosition.x = screenPosition.x - width + Math.floor(objectData.ySize / 2) * cameraSize + cameraSize * 2;
+    screenPosition.y = screenPosition.y - height + cameraSize;
+
+    let src = objectData.src;
+    if (objectData.animation) {
+      const t = Date.now() % objectData.animation.duration * objectData.animation.textures.length;
+      for (let ii in objectData.animation.textures) {
+        ii = Number(ii);
+        const interval = (ii + 1) * objectData.animation.duration;
+        if (t <= interval && t > interval - objectData.animation.duration) {
+          src = objectData.animation.textures[ii];
+          break;
+        }
+      }
+    }
+
+
+    //screenPosition.y -= height;
+
+    //console.log(`${width};${height}`);
+    this.GameObject.drawImage(src, screenPosition.x, screenPosition.y, width, height);
+  }
+
+  getTileCursorOn(mX, mY, z = 0) {
+    if (!mX || !mY) return false;
+    const screenCenterX = this.GameObject.canvas.width / 2;
+    const screenCenterY = this.GameObject.canvas.height / 2;
+    mX = (mX - screenCenterX);
+    mY = (mY - screenCenterY) * 2 - (this.size / 2 * this.GameObject.camera.size);
     
+    //const gameTileSize = Math.sqrt(Math.pow(this.size / 4, 2) + Math.pow(this.size / 2, 2));
+    const gameX = Math.round((mY + mX + this.GameObject.camera.x * this.size * this.GameObject.camera.size) / (this.size * this.GameObject.camera.size)) + 1 + z;
+    const gameY = Math.round((mY - mX + this.GameObject.camera.y * this.size * this.GameObject.camera.size) / (this.size * this.GameObject.camera.size)) + 1 + z;
+
+    const tileElements = [];
+    let lowestZ = undefined;
+    let highestZ = undefined;
+    for (let tileIndex in this.tiles) {
+      const tile = this.tiles[tileIndex];
+      if (!tileElements[tile.x]) tileElements[tile.x] = [];
+      if (!tileElements[tile.x][tile.y]) tileElements[tile.x][tile.y] = [];
+      tileElements[tile.x][tile.y][tile.z] = tile;
+      if (typeof lowestZ === 'undefined') lowestZ = tile.z;
+      if (typeof highestZ === 'undefined') highestZ = tile.z;
+      if (lowestZ > tile.z) lowestZ = tile.z;
+      if (highestZ < tile.z) highestZ = tile.z;
+    }
+    //console.log(lowestZ)
+    for (let lz = highestZ; lz >= lowestZ; lz -= 1) {
+      if (tileElements[gameX + lz] && tileElements[gameX + lz][gameY + lz] && tileElements[gameX + lz][gameY + lz][lz]) {
+        z = lz;
+        break;
+      }
+    }
+  
+    this.drawTile({ tid: -1, x: gameX + z, y: gameY + z, z: z }, this.size * this.GameObject.camera.size);
+
+    //console.log(`${gameX};${gameY}`);
+    return {
+      x: gameX,
+      y: gameY,
+      z: z
+    };
   }
 
-  draw() {
+  draw(options = {}) {
     const realRenderDistance = this.GameObject.renderDistance * 2 + 1;
     const cameraX = Math.floor(this.GameObject.camera.x);
     const cameraY = Math.floor(this.GameObject.camera.y);
@@ -145,6 +242,17 @@ IsometricGame.Map = class {
               if (tileElements[x][y][z]) this.drawTile(tileElements[x][y][z], cameraSize);
             }
           }
+          //if (objectElements[x]) console.log(objectElements[x]);
+          //console.log(1)
+          if (objectElements[x] && objectElements[x][y]) {
+            for (let z = this.lowestPoint.z; z <= this.highestPoint.z; z += 1) {
+              if (objectElements[x][y][z]) {  
+                for (let i in objectElements[x][y][z]) {
+                  this.drawObject(objectElements[x][y][z][i], cameraSize);
+                }
+              }
+            }
+          }
         }
       } else { // Krótszy
         //console.log('K');
@@ -155,6 +263,15 @@ IsometricGame.Map = class {
           if (tileElements[x] && tileElements[x][y]) {
             for (let z = this.lowestPoint.z; z <= this.highestPoint.z; z += 1) {
               if (tileElements[x][y][z]) this.drawTile(tileElements[x][y][z], cameraSize);
+            }
+          }
+          if (objectElements[x] && objectElements[x][y]) {
+            for (let z = this.lowestPoint.z; z <= this.highestPoint.z; z += 1) {
+              if (objectElements[x][y][z]) {  
+                for (let i in objectElements[x][y][z]) {
+                  this.drawObject(objectElements[x][y][z][i], cameraSize);
+                }
+              }
             }
           }
         }  
@@ -335,15 +452,66 @@ IsometricGame.Map = class {
 }
 
 IsometricGame.Map.defaultObjects = {
+  // 0: {
+  //   name: 'Sprite',
+  //   src: 'src/img/tex/sprite.png',
+  //   collidable: true,
+  //   physics: true,
+  // },
+
   0: {
-    name: 'Sprite',
-    src: 'src/img/tex/sprite.png',
+    name: 'Container',
+    src: 'src/img/tex/container.png',
     collidable: true,
-    physics: true,
+    xSize: 3,
+    ySize: 2,
+    zSize: 2,
+    animation: {
+      duration: 1200, //ms
+      textures: [
+        'src/img/tex/container.png',
+        'src/img/tex/container2.png',
+      ],
+    },
+  },
+  1: {
+    name: 'Container',
+    src: 'src/img/tex/greenbox.png',
+    collidable: true,
+    xSize: 2,
+    ySize: 2,
+    zSize: 2,
+    animation: {
+      duration: 500, //ms
+      textures: [
+        'src/img/tex/123.png',
+        'src/img/tex/redbox.png',
+      ],
+    },
+  },
+  2: {
+    name: 'Container',
+    src: 'src/img/tex/stone.png',
+    collidable: true,
+    xSize: 1,
+    ySize: 1,
+    zSize: 1,
   },
 };
 
 IsometricGame.Map.defaultTiles = {
+  '-1': {
+    name: 'Tile Selector',
+    src: 'src/img/tex/tile_select.png',
+    animation: {
+      duration: 1200, //ms
+      textures: [
+        'src/img/tex/tile_select.png',
+        'src/img/tex/tile_select2.png',
+      ],
+    },
+    collidable: false,
+  },
   0: {
     name: 'Grass',
     src: 'src/img/tex/grass.png',
@@ -369,6 +537,18 @@ IsometricGame.Map.defaultTiles = {
       textures: [
         'src/img/tex/water.png',
         'src/img/tex/water2.png',
+      ],
+    },
+    collidable: false,
+  },
+  3: {
+    name: 'Box',
+    src: 'src/img/tex/whitebox.png',
+    animation: {
+      duration: 1000, //ms
+      textures: [
+        'src/img/tex/whitebox.png',
+        'src/img/tex/greenbox.png',
       ],
     },
     collidable: false,

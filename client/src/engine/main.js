@@ -7,6 +7,7 @@ class IsometricGame {
     options.element = !!options.element ? options.element : 'body';
     options.background = !!options.background ? options.background : '#222';
     this.fpsMax = !!options.fpsMax ? options.fpsMax : 60;
+    this.devmode = !!options.devmode;
 
     this.canvas = document.createElement('canvas');
     this.canvas.width = options.width;
@@ -25,7 +26,7 @@ class IsometricGame {
   getScreenPositionFromTile(x, y, z = 0, size) {
     return {
       x: this.canvas.width / 2 - size / 2 + size * x / 2 - size / 2 * y - size * this.camera.x / 2 + size * this.camera.y / 2,
-      y: this.canvas.height / 2 - size / 2 + size * y / 4 + size / 4 * x - size / 4 * z - size * this.camera.x / 4 - this.camera.y / 4 * size,
+      y: this.canvas.height / 2 - size / 2 + size * y / 4 + size / 4 * x - size / 2 * z - size * this.camera.x / 4 - this.camera.y / 4 * size,
     };
   }
 
@@ -45,7 +46,7 @@ class IsometricGame {
       this.canvas.getContext('2d').clearRect(0, 0, this.canvas.width, this.canvas.height);
       if (this.render) this.render();
       //requestAnimationFrame(xxx);
-      setTimeout(xxx, 1000 / this.fpsMax);
+      if (this.rendering) setTimeout(xxx, 1000 / this.fpsMax);
     };
     xxx();
   }
